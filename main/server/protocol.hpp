@@ -1,11 +1,12 @@
 #pragma once
 #include "../segment.hpp"
+#include <coroutine>
 
 namespace server {
 
 class Protocol {
 protected:
-	uint8_t buf[256];
+	uint8_t buf[255 + 6]; //max server response
 	size_t pos = 0;
 
 	class chkcalc {
@@ -38,10 +39,24 @@ public:
 		}
 	}
 
+	void write_arr(const uint8_t *data, size_t size) {
+		for (size_t i = 0; i < size; ++i) {
+			buf[pos++] = data[i];
+		}
+	}
+
 	template <class T> T read(size_t size) {
 		T out = 0;
 		for (size_t i = 0; i < size; ++i) {
 			out |= (T)buf[pos++] << (i * 8);
+		}
+		return out;
+	}
+
+	template <class T> static T read(segment seg) {
+		T out = 0;
+		for (size_t i = 0; i < seg.size; ++i) {
+			out |= (T)seg.data[i] << (i * 8);
 		}
 		return out;
 	}
@@ -61,36 +76,89 @@ public:
 		//segment uid = "123456789";
 		buf[pos++] = 0xFF;
 		buf[pos++] = 0x23;
-		write(imei, 9);
+		write(imei, 8);
 	}
 
-	segment header2_response_buffer() {
-		assert(pos == 0);
-		return segment(buf, 9);
-	}
-	uint32_t header2_response_parse() {
-		assert(pos == 0);
-		if (buf[pos++] != 0x7B) {
-			goto error;
+//	segment header2_response_buffer() {
+//		assert(pos == 0);
+//		return segment(buf, 9);
+//	}
+//	uint32_t header2_response_parse(std::function<void(segment)> reader) {
+//		auto res = server_com_parse(reader);
+//		if (res.parcel_number != 0 || res.data.size != 4) {
+//			throw std::runtime_error("unexpected response to header");
+//		}
+//		auto t = read<uint32_t>(res.data);
+//		reset();
+//		return t;
+////		assert(pos == 0);
+////		if (buf[pos++] != 0x7B) {
+////			goto error;
+////		}
+////		if (buf[pos++] != 0x04) {
+////			goto error;
+////		}
+////		++pos; // parcel number ??
+////		++pos; // checksum
+////		{
+////			auto timestamp = read<uint32_t>(4);
+////			printf("%lu\n", timestamp);
+////			if (buf[pos++] != 0x7D) {
+////				goto error;
+////			}
+////			output().dump_hex();
+////			pos = 0;
+////			return timestamp;
+////		}
+////		error:
+////		throw std::runtime_error(std::string("unexpected response; pos = ") +
+////				std::to_string(pos - 1) + "; value = " + std::to_string(buf[pos-1]));
+//	}
+
+
+	class Server_com {
+		friend Protocol;
+	protected:
+		Server_com(Protocol &p) {
+			assert(p.pos == 0);
+			data.data = p.buf;
 		}
-		if (buf[pos++] != 0x04) {
-			goto error;
+	public:
+		uint8_t parcel_number = 0;
+		segment data;
+		segment begin() {
+			return segment(data.data, 3);
 		}
-		++pos; // parcel number ??
-		++pos; // checksum
-		{
-			auto timestamp = read<uint32_t>(4);
-			printf("%lu\n", timestamp);
-			if (buf[pos++] != 0x7D) {
-				goto error;
+		segment rest() {
+			if (data[0] != 0x7B) {
+				throw std::runtime_error(std::string("expected 0x7B, got ") + std::to_string(data[0]));
 			}
-			output().dump_hex();
-			pos = 0;
-			return timestamp;
+			data.size = data[1];
+			parcel_number = data[2];
+			segment out(data.data + 3, 1);
+			data.data += 3;
+			if (data.size > 0) {
+				data.data += 1;
+				out.size = data.size + 2;
+			}
+			return out;
 		}
-		error:
-		throw std::runtime_error(std::string("unexpected response; pos = ") +
-				std::to_string(pos - 1) + "; value = " + std::to_string(buf[pos-1]));
+		void finish() {
+			if (data[data.size] != 0x7D) {
+				throw std::runtime_error(std::string("expected 0x7D, got ") + std::to_string(data[data.size]));
+			}
+		}
+		uint32_t com_header2() {
+			if (parcel_number != 0 || data.size != 4) {
+				throw std::runtime_error("unexpected response to header");
+			}
+			return read<uint32_t>(data);
+		}
+	};
+	friend Server_com;
+
+	Server_com server_com() {
+		return Server_com(*this);
 	}
 
 	void begin_package(uint8_t parcel_number) {
@@ -107,7 +175,6 @@ public:
 		buf[pos++] = 0x01;
 		write<uint16_t>(length, 2);
 		write<uint32_t>(time(0) * 1000, 4, chk);
-		printf("%llu\n", time(0) * 1000);
 		return chk;
 	}
 

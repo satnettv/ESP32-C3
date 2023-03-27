@@ -83,42 +83,43 @@ public:
 		char c;
 		while(true) {
 			while(ch() != '$') {}
+			parse_buffer.reset();
 			while((c = ch()) != ',') {
 				parse_buffer.write(c);
 			}
-			if (parse_buffer.match("GPGGA")) {
-				parse_buffer.reset();
-				parse_gga();
-			} else {
+//			if (parse_buffer.match("GPGGA")) {
+//				parse_buffer.reset();
+//				parse_gga();
+//			} else {
 				while((c = ch()) != '\r') {}
-			}
+//			}
 		}
 	}
 
-	void parse_gga() {
-		while(ch() != ',') {} // time; 2
-		parse_lat(); // 3,4
-	}
+//	void parse_gga() {
+//		while(ch() != ',') {} // time; 2
+//		parse_lat(); // 3,4
+//	}
 
-	void dump(FILE_RAII &f) {
-		auto r = data.get();
-		for (auto &kv: *r) {
-			f.printf("%.*s,%.*s\n", kv.first.size(), kv.first.data(), kv.second.size(), kv.second.data());
-		}
-	}
-
-	void dump() {
-		auto r = data.get();
-		for (auto &kv: *r) {
-			ESP_LOGI(TAG, "%.*s,%.*s", kv.first.size(), kv.first.data(), kv.second.size(), kv.second.data());
-		}
-	}
-
-	template <size_t S> void dump(char (&buf)[S], std::function<void()> f) {
-		auto r = data.get();
-		for (auto &kv: *r) {
-			snprintf(buf, S, "%.*s,%.*s", kv.first.size(), kv.first.data(), kv.second.size(), kv.second.data());
-			f();
-		}
-	}
+//	void dump(FILE_RAII &f) {
+//		auto r = data.get();
+//		for (auto &kv: *r) {
+//			f.printf("%.*s,%.*s\n", kv.first.size(), kv.first.data(), kv.second.size(), kv.second.data());
+//		}
+//	}
+//
+//	void dump() {
+//		auto r = data.get();
+//		for (auto &kv: *r) {
+//			ESP_LOGI(TAG, "%.*s,%.*s", kv.first.size(), kv.first.data(), kv.second.size(), kv.second.data());
+//		}
+//	}
+//
+//	template <size_t S> void dump(char (&buf)[S], std::function<void()> f) {
+//		auto r = data.get();
+//		for (auto &kv: *r) {
+//			snprintf(buf, S, "%.*s,%.*s", kv.first.size(), kv.first.data(), kv.second.size(), kv.second.data());
+//			f();
+//		}
+//	}
 };

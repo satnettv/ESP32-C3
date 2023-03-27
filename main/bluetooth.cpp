@@ -193,20 +193,20 @@ static void gatts_profile_a_event_handler(esp_gatts_cb_event_t event, esp_gatt_i
         esp_ble_gatts_create_service(gatts_if, &gl_profile_tab[0].service_id, GATTS_NUM_HANDLE_TEST_A);
         break;
     case ESP_GATTS_READ_EVT: {
-        ESP_LOGI(BT::TAG, "GATT_READ_EVT, conn_id %d, trans_id %" PRIu32 ", handle %d, offset %u\n", param->read.conn_id, param->read.trans_id, param->read.handle, param->read.offset);
-        esp_gatt_rsp_t rsp = {};
-        rsp.attr_value.handle = param->read.handle;
-        if (param->read.offset == 0) {
-        	response_data = "$GPGGA,";
-            auto r = gps.data.get();
-            response_data += r->operator []("$GPGGA");
-        }
-        auto len = std::min<size_t>(response_data.size(), ESP_GATT_MAX_ATTR_LEN);
-        memcpy(rsp.attr_value.value, response_data.data() + param->read.offset, len - param->read.offset);
-        rsp.attr_value.len = len - param->read.offset;
-        rsp.attr_value.offset = param->read.offset;
-        esp_ble_gatts_send_response(gatts_if, param->read.conn_id, param->read.trans_id,
-                                    ESP_GATT_OK, &rsp);
+//        ESP_LOGI(BT::TAG, "GATT_READ_EVT, conn_id %d, trans_id %" PRIu32 ", handle %d, offset %u\n", param->read.conn_id, param->read.trans_id, param->read.handle, param->read.offset);
+//        esp_gatt_rsp_t rsp = {};
+//        rsp.attr_value.handle = param->read.handle;
+//        if (param->read.offset == 0) {
+//        	response_data = "$GPGGA,";
+//            auto r = gps.data.get();
+//            response_data += r->operator []("$GPGGA");
+//        }
+//        auto len = std::min<size_t>(response_data.size(), ESP_GATT_MAX_ATTR_LEN);
+//        memcpy(rsp.attr_value.value, response_data.data() + param->read.offset, len - param->read.offset);
+//        rsp.attr_value.len = len - param->read.offset;
+//        rsp.attr_value.offset = param->read.offset;
+//        esp_ble_gatts_send_response(gatts_if, param->read.conn_id, param->read.trans_id,
+//                                    ESP_GATT_OK, &rsp);
         break;
     }
     case ESP_GATTS_WRITE_EVT: {
