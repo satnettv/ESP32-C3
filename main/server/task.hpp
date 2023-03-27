@@ -2,6 +2,7 @@
 #include "protocol.hpp"
 #include "../network/tcp_sock.hpp"
 #include "esp_sntp.h"
+#include <optional>
 
 namespace server {
 
@@ -32,18 +33,15 @@ class CommTask: public Task {
 					socket.write(proto.output());
 					ESP_LOGI(TAG, "sent parcel %d", 1);
 
-					auto rp = proto.server_com();
-					fill_segment(rp.begin());
-					fill_segment(rp.rest());
-					rp.finish();
-
-					if (rp.parcel_number) {
-						ESP_LOGI(TAG, "parcel %d confirmed", rp.parcel_number);
-					} else {
-						ESP_LOGI(TAG, "no response");
-					}
-					if (!t.done()) {
-						vTaskDelay(t);
+					while (!t.done()) {
+						auto rp = read_response(t);
+						if (rp) {
+							if (rp->parcel_number > 0 && rp->parcel_number <= 0xFB) {
+								ESP_LOGI(TAG, "parcel %d confirmed", rp->parcel_number);
+							} else {
+								ESP_LOGI(TAG, "command from server; parcel number = 0x%02X, size = %d", rp->parcel_number, rp->data.size);
+							}
+						}
 					}
 				}
 			} catch (const std::exception &e) {
@@ -58,14 +56,20 @@ class CommTask: public Task {
 	//	}
 
 	void fill_segment(segment seg, TickType_t timeout = portMAX_DELAY) {
-		socket.read_all(seg.data, seg.size);
+		if (socket.read_all(seg.data, seg.size) != seg.size) {
+			throw std::runtime_error("server response timeout");
+		}
 	}
 
-	std::optional<Protocol::Server_com> read_response(Timeout &start_timeout) {
-		auto rp = proto.server_com();
-		fill_segment(rp.begin(), start_timeout);
-		fill_segment(rp.rest());
-		rp.finish();
+	std::optional<Protocol::Server_com> read_response(TickType_t start_timeout) {
+		std::optional<Protocol::Server_com> out;
+		if (socket.wait_readable(start_timeout)) {
+			out = proto.server_com();
+			fill_segment(out->begin(), pdMS_TO_TICKS(1000));
+			fill_segment(out->rest(), pdMS_TO_TICKS(1000));
+			out->finish();
+		}
+		return out;
 	}
 
 	void establish() {
@@ -76,12 +80,11 @@ class CommTask: public Task {
 		proto.build_header2();
 		socket.write(proto.output());
 
-
-		auto rp = proto.server_com();
-		fill_segment(rp.begin());
-		fill_segment(rp.rest());
-		rp.finish();
-		auto t = rp.com_header2();
+		auto rp = read_response(pdMS_TO_TICKS(15000));
+		if (!rp.has_value()) {
+			throw std::runtime_error("server response timeout");
+		}
+		auto t = rp->com_header2();
 		timeval tv = {
 			.tv_sec = t / 1000,
 			.tv_usec = (suseconds_t)(t % 1000) * 1000,

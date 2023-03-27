@@ -52,6 +52,24 @@ public:
 		}
 	}
 
+	bool wait_readable(TickType_t ticks) {
+        fd_set rfds;
+        FD_ZERO(&rfds);
+        FD_SET(s, &rfds);
+
+        auto ms = pdTICKS_TO_MS(ticks);
+        timeval tv = {
+    		    .tv_sec = ms / 1000,
+    		    .tv_usec = (suseconds_t)(ms % 1000) * 1000,
+        };
+
+        auto res = select(s + 1, &rfds, NULL, NULL, &tv);
+        if (res < 0) {
+        	throw std::runtime_error(strerror(errno));
+		}
+        return res > 0;
+	}
+
 
 	TCP_sock& operator=(TCP_sock &&other) {
 		if (s > 0) {

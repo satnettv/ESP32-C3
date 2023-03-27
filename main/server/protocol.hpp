@@ -79,41 +79,39 @@ public:
 		write(imei, 8);
 	}
 
-//	segment header2_response_buffer() {
-//		assert(pos == 0);
-//		return segment(buf, 9);
-//	}
-//	uint32_t header2_response_parse(std::function<void(segment)> reader) {
-//		auto res = server_com_parse(reader);
-//		if (res.parcel_number != 0 || res.data.size != 4) {
-//			throw std::runtime_error("unexpected response to header");
-//		}
-//		auto t = read<uint32_t>(res.data);
-//		reset();
-//		return t;
-////		assert(pos == 0);
-////		if (buf[pos++] != 0x7B) {
-////			goto error;
-////		}
-////		if (buf[pos++] != 0x04) {
-////			goto error;
-////		}
-////		++pos; // parcel number ??
-////		++pos; // checksum
-////		{
-////			auto timestamp = read<uint32_t>(4);
-////			printf("%lu\n", timestamp);
-////			if (buf[pos++] != 0x7D) {
-////				goto error;
-////			}
-////			output().dump_hex();
-////			pos = 0;
-////			return timestamp;
-////		}
-////		error:
-////		throw std::runtime_error(std::string("unexpected response; pos = ") +
-////				std::to_string(pos - 1) + "; value = " + std::to_string(buf[pos-1]));
-//	}
+
+	void begin_package(uint8_t parcel_number) {
+		buf[pos++] = 0x5B;
+		buf[pos++] = parcel_number;
+	}
+
+	void end_package() {
+		buf[pos++] = 0x5D;
+	}
+
+	chkcalc begin_packet(uint16_t length) {
+		chkcalc chk;
+		buf[pos++] = 0x01;
+		write<uint16_t>(length, 2);
+		write<uint32_t>(time(0) * 1000, 4, chk);
+		return chk;
+	}
+
+	void end_packet(chkcalc &chk) {
+		buf[pos++] = chk.get();
+	}
+
+
+	void write_dummy_data(chkcalc &chk) {
+		write_arr(dummy_data, sizeof(dummy_data), chk);
+	}
+
+	static constexpr const uint8_t dummy_data[] = {
+			0xFC, 0xFF, 0x0F, 0x07, 0x00,
+			0xFD, 0x67, 0xD2, 0xC8, 0x29,
+			0xFE, 0x18, 0xA7, 0x95, 0x0A,
+			0xFF, 0xA2, 0x68, 0x02, 0x00
+	};
 
 
 	class Server_com {
@@ -150,7 +148,7 @@ public:
 		}
 		uint32_t com_header2() {
 			if (parcel_number != 0 || data.size != 4) {
-				throw std::runtime_error("unexpected response to header");
+				throw std::runtime_error("unexpected response to header2");
 			}
 			return read<uint32_t>(data);
 		}
@@ -161,38 +159,6 @@ public:
 		return Server_com(*this);
 	}
 
-	void begin_package(uint8_t parcel_number) {
-		buf[pos++] = 0x5B;
-		buf[pos++] = parcel_number;
-	}
-
-	void end_package() {
-		buf[pos++] = 0x5D;
-	}
-
-	chkcalc begin_packet(uint16_t length) {
-		chkcalc chk;
-		buf[pos++] = 0x01;
-		write<uint16_t>(length, 2);
-		write<uint32_t>(time(0) * 1000, 4, chk);
-		return chk;
-	}
-
-	void end_packet(chkcalc &chk) {
-		buf[pos++] = chk.get();
-	}
-
-
-	void write_dummy_data(chkcalc &chk) {
-		write_arr(dummy_data, sizeof(dummy_data), chk);
-	}
-
-	static constexpr const uint8_t dummy_data[] = {
-			0xFC, 0xFF, 0x0F, 0x07, 0x00,
-			0xFD, 0x67, 0xD2, 0xC8, 0x29,
-			0xFE, 0x18, 0xA7, 0x95, 0x0A,
-			0xFF, 0xA2, 0x68, 0x02, 0x00
-	};
 };
 
 }
