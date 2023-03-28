@@ -21,6 +21,16 @@ protected:
 	};
 
 public:
+	enum Packet_type: uint8_t {
+		DATA = 1,
+		TEXT = 3,
+		FILE = 4,
+		DATA_BINARY = 6,
+		CONFIRM_THE_COMMAND = 8,
+		CONFIRM_THE_COMMAND_BY_TOKEN = 9,
+		SERVICE_TEXT = 13
+	};
+
 	template <class T> void write(T num, size_t size) {
 		while(size--) {
 			buf[pos++] = num & 0xFF;
@@ -89,9 +99,9 @@ public:
 		buf[pos++] = 0x5D;
 	}
 
-	chkcalc begin_packet(uint16_t length) {
+	chkcalc begin_packet(uint16_t length, Packet_type type) {
 		chkcalc chk;
-		buf[pos++] = 0x01;
+		buf[pos++] = type;
 		write<uint16_t>(length, 2);
 		write<uint32_t>(time(0) * 1000, 4, chk);
 		return chk;
@@ -101,17 +111,17 @@ public:
 		buf[pos++] = chk.get();
 	}
 
-
-	void write_dummy_data(chkcalc &chk) {
-		write_arr(dummy_data, sizeof(dummy_data), chk);
+	void text_packet(const char *text) {
+		auto len = strlen(text);
+		auto chk = begin_packet(len, TEXT);
+		write_arr((const uint8_t*)text, len, chk);
+		end_packet(chk);
 	}
 
-	static constexpr const uint8_t dummy_data[] = {
-			0xFC, 0xFF, 0x0F, 0x07, 0x00,
-			0xFD, 0x67, 0xD2, 0xC8, 0x29,
-			0xFE, 0x18, 0xA7, 0x95, 0x0A,
-			0xFF, 0xA2, 0x68, 0x02, 0x00
-	};
+	void write_tag(uint8_t num, float data, chkcalc &chk) {
+		write(num, 1, chk);
+		write(*((uint32_t*)&data), 4, chk);
+	}
 
 
 	class Server_com {

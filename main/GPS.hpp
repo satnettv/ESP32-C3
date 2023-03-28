@@ -7,7 +7,7 @@
 #include "freertos/freeRTOS.h"
 #include "freertospp/Task.hpp"
 #include "fs.hpp"
-#include <functional>
+#include <optional>
 
 class GPS: public Task {
 protected:
@@ -48,17 +48,48 @@ protected:
 			} else {
 				buffer.end_pos = 0;
 			}
-//			printf("%.*s", buffer.end_pos, buffer.buf);
 		}
+//		printf("%c", buffer.buf[buffer.parse_pos]);
 		return buffer.buf[buffer.parse_pos++];
 	}
 
-	int dig() {
-		return ch() - '0';
-	}
 public:
 	static constexpr const char *TAG = "GPS";
 	static constexpr const uart_port_t uart_num = UART_NUM_0;
+
+	struct Data {
+		struct Gga {
+			std::optional<uint32_t> time;
+			std::optional<float> lat;
+			std::optional<float> lon;
+			std::optional<uint8_t> quality;
+			std::optional<uint8_t> num_sats;
+			std::optional<float> hdop;
+			std::optional<float> alt; // meters
+			std::optional<float> undulation; // meters
+			std::optional<uint8_t> age;
+			std::optional<uint16_t> stn_ID;
+			void dump() {
+				if (time) {
+					printf("time = %lu\n", *time);
+				} else {
+					printf("no time\n");
+				}
+				if (lat) {
+					printf("lat = %f\n", *lat);
+				} else {
+					printf("no lat\n");
+				}
+				if (lon) {
+					printf("lon = %f\n", *lon);
+				} else {
+					printf("no lon\n");
+				}
+			}
+		} gga;
+	};
+
+	Mutex_val<Data> data;
 
 	void setup() {
 		uart_config_t uart_config = {
@@ -73,7 +104,7 @@ public:
 		ESP_ERROR_CHECK(uart_param_config(uart_num, &uart_config));
 		ESP_ERROR_CHECK(uart_set_pin(uart_num, -1, pins::GPS_TX, -1, -1));
 
-		const int uart_buffer_size = (1024 * 2);
+		const int uart_buffer_size = (1024 * 3);
 
 		ESP_ERROR_CHECK(uart_driver_install(uart_num, uart_buffer_size, 0, 10, &uart_queue, 0));
 		Task::start("gps", 2048);
@@ -83,43 +114,159 @@ public:
 		char c;
 		while(true) {
 			while(ch() != '$') {}
-			parse_buffer.reset();
-			while((c = ch()) != ',') {
-				parse_buffer.write(c);
+			try {
+				parse_buffer.reset();
+				while((c = ch()) != ',') {
+					parse_buffer.write(c);
+				}
+				if (parse_buffer.match("GPGGA")) {
+					parse_buffer.reset();
+					parse_gga();
+				} else {
+//					parse_buffer.write(0);
+//					printf("got %s\n", parse_buffer.buf);
+				}
+			} catch (const std::exception &e) {
+				ESP_LOGE(TAG, "exception %s", e.what());
 			}
-//			if (parse_buffer.match("GPGGA")) {
-//				parse_buffer.reset();
-//				parse_gga();
-//			} else {
-				while((c = ch()) != '\r') {}
-//			}
 		}
 	}
 
-//	void parse_gga() {
-//		while(ch() != ',') {} // time; 2
-//		parse_lat(); // 3,4
-//	}
+	void parse_gga() {
+		auto _data = data.get();
+		auto &out = _data->gga;
+		out.time = parse_time();
+		out.lat = parse_lat();
+		out.lon = parse_lon();
+		out.quality = parse_dec<uint8_t>();
+		out.num_sats = parse_dec<uint8_t>();
+		out.hdop = parse_float();
+		out.alt = parse_float_units();
+		out.undulation = parse_float_units();
+		out.age = parse_dec<uint8_t>();
+		out.stn_ID = parse_dec<uint16_t>();
+		parse_csum();
+	}
 
-//	void dump(FILE_RAII &f) {
-//		auto r = data.get();
-//		for (auto &kv: *r) {
-//			f.printf("%.*s,%.*s\n", kv.first.size(), kv.first.data(), kv.second.size(), kv.second.data());
-//		}
-//	}
-//
-//	void dump() {
-//		auto r = data.get();
-//		for (auto &kv: *r) {
-//			ESP_LOGI(TAG, "%.*s,%.*s", kv.first.size(), kv.first.data(), kv.second.size(), kv.second.data());
-//		}
-//	}
-//
-//	template <size_t S> void dump(char (&buf)[S], std::function<void()> f) {
-//		auto r = data.get();
-//		for (auto &kv: *r) {
-//			snprintf(buf, S, "%.*s,%.*s", kv.first.size(), kv.first.data(), kv.second.size(), kv.second.data());
-//			f();
-//		}
-//	}
+	uint32_t digit(uint8_t ch) {
+		if (ch < '0' || ch > '9') {
+			throw std::runtime_error("expected digit");
+		}
+		return ch - '0';
+	}
+
+	std::optional<uint32_t> parse_time() {
+		std::optional<uint32_t> out;
+		auto c = ch();
+		if (!sep(c)) {
+			uint8_t h = digit(c) * 10 + digit(ch());
+			uint8_t m = digit(ch()) * 10 + digit(ch());
+			uint8_t s = digit(ch()) * 10 + digit(ch());
+			if (ch() != '.') {
+				throw std::runtime_error("expected .");
+			}
+			uint8_t s_dec = digit(ch()) * 10 + digit(ch());
+			if (!sep(ch())) {
+				throw std::runtime_error("expected separator");
+			}
+			out = s + (m + h * 60) * 60;
+		}
+		return out;
+	}
+
+	std::optional<float> parse_lat() {
+		auto c = ch();
+		std::optional<float> f;
+		if (!sep(c)) {
+			uint8_t degs = digit(c) * 10 + digit(ch());
+			f = parse_float();
+			read_segment_into_parse_buffer();
+			if (parse_buffer.end_pos > 0) {
+				*f /= 60;
+				*f += degs;
+				if (parse_buffer.buf[0] == 'S') {
+					*f = -*f;
+				}
+			}
+			parse_buffer.reset();
+		}
+		return f;
+	}
+
+	std::optional<float> parse_lon() {
+		auto c = ch();
+		std::optional<float> f;
+		if (!sep(c)) {
+			uint8_t degs = digit(c) * 100 + digit(ch()) * 10 + digit(ch());
+			f = parse_float();
+			read_segment_into_parse_buffer();
+			if (parse_buffer.end_pos > 0) {
+				*f /= 60;
+				*f += degs;
+				if (parse_buffer.buf[0] == 'W') {
+					*f = -*f;
+				}
+			}
+			parse_buffer.reset();
+		}
+		return f;
+	}
+
+	bool sep(char c) {
+		return c == '\r' || c == ',' || c == '*';
+	}
+
+	template <class T> std::optional<T>parse_dec() {
+		std::optional<T> out;
+		char c = ch();
+		if (!sep(c)) {
+			out = (T)(c - '0');
+			while(!sep(c = ch())) {
+				*out *= 10;
+				*out += c - '0';
+			}
+		}
+		return out;
+	}
+
+	std::optional<float> parse_float() {
+		read_segment_into_parse_buffer();
+		std::optional<float> out;
+
+		if (parse_buffer.end_pos > 0) {
+			parse_buffer.write(0);
+			out = atof((char*)parse_buffer.buf);
+		}
+		parse_buffer.reset();
+		return out;
+	}
+
+	std::optional<float> parse_float_units() {
+		auto f = parse_float();
+		read_segment_into_parse_buffer();
+		if (f && parse_buffer.end_pos > 0) {
+			if (parse_buffer.buf[0] != 'M') {
+				throw std::runtime_error("unsupported unit (foot)");
+			}
+		} else {
+			f = {};
+		}
+		return f;
+	}
+
+	void read_segment_into_parse_buffer() {
+		char c;
+		while(!sep(c = ch())) {
+			parse_buffer.write(c);
+		}
+	}
+
+	uint8_t parse_csum() {
+		while(!sep(ch())) {
+
+		}
+		return 0;
+	}
 };
+
+extern GPS gps;

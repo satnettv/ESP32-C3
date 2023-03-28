@@ -3,6 +3,7 @@
 #include "../network/tcp_sock.hpp"
 #include "esp_sntp.h"
 #include <optional>
+#include "../GPS.hpp"
 
 namespace server {
 
@@ -22,16 +23,18 @@ class CommTask: public Task {
 		while(true) {
 			try {
 				establish();
+				uint8_t i = 0;
 				while(true) {
-					Timeout t(15000);
+					if (++i == 0xFC) {
+						i = 1;
+					}
+					Timeout t(pdMS_TO_TICKS(15000));
 
-					proto.begin_package(1);
-					auto calc = proto.begin_packet(sizeof(proto.dummy_data));
-					proto.write_dummy_data(calc);
-					proto.end_packet(calc);
+					proto.begin_package(i);
+					write_gps_packet();
 					proto.end_package();
-					socket.write(proto.output());
-					ESP_LOGI(TAG, "sent parcel %d", 1);
+					auto sz = socket.write(proto.output());
+					ESP_LOGI(TAG, "sent parcel %d; size = %d", i, sz);
 
 					while (!t.done()) {
 						auto rp = read_response(t);
@@ -50,10 +53,6 @@ class CommTask: public Task {
 			vTaskDelay(pdMS_TO_TICKS(10000));
 		}
 	};
-
-	//	void asda() {
-	////		sntp_sync_time();
-	//	}
 
 	void fill_segment(segment seg, TickType_t timeout = portMAX_DELAY) {
 		if (socket.read_all(seg.data, seg.size) != seg.size) {
@@ -91,6 +90,17 @@ class CommTask: public Task {
 		};
 		sntp_sync_time(&tv);
 		ESP_LOGI(TAG, "ok; server time is %lu", t);
+	}
+
+	void write_gps_packet() {
+		auto d = gps.data.get();
+//		d->gga.dump();
+		if (d->gga.lat) {
+			auto calc = proto.begin_packet(5 * 2, proto.DATA);
+			proto.write_tag(3, *d->gga.lat, calc);
+			proto.write_tag(4, *d->gga.lon, calc);
+			proto.end_packet(calc);
+		}
 	}
 public:
 	CommTask() {}
