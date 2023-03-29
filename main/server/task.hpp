@@ -95,11 +95,22 @@ class CommTask: public Task {
 	void write_gps_packet() {
 		auto d = gps.data.get();
 //		d->gga.dump();
-		if (d->gga.lat) {
+		if (d->gga.valid()) {
 			auto calc = proto.begin_packet(5 * 2, proto.DATA);
 			proto.write_tag(3, *d->gga.lat, calc);
 			proto.write_tag(4, *d->gga.lon, calc);
 			proto.end_packet(calc);
+
+			if (d->vtg.valid()) {
+				uint8_t data[4];
+				data[3] = *d->vtg.speed_km / 1.852;
+				data[2] = *d->gga.num_sats << 4;
+				data[1] = *d->gga.alt / 10;
+				data[0] = *d->vtg.course_measured / 2;
+				auto calc = proto.begin_packet(5, proto.DATA);
+				proto.write_tag(5, data, calc);
+				proto.end_packet(calc);
+			}
 		}
 	}
 public:

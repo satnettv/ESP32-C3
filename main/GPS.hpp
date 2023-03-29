@@ -13,7 +13,7 @@ class GPS: public Task {
 protected:
 	QueueHandle_t uart_queue;
 	struct Buffer {
-		static constexpr size_t size = 83;
+		static constexpr size_t size = 83*4;
 		uint8_t buf[size];
 		size_t parse_pos = 0;
 		size_t end_pos = 0;
@@ -49,7 +49,9 @@ protected:
 				buffer.end_pos = 0;
 			}
 		}
-//		printf("%c", buffer.buf[buffer.parse_pos]);
+//		if (buffer.buf[buffer.parse_pos] != '\r') {
+//			printf("%c", buffer.buf[buffer.parse_pos]);
+//		}
 		return buffer.buf[buffer.parse_pos++];
 	}
 
@@ -86,7 +88,32 @@ public:
 					printf("no lon\n");
 				}
 			}
+			void clear() {
+				*this = Gga();
+			}
+			bool valid() {
+				return quality && *quality != 0;
+			}
 		} gga;
+		struct Vtg {
+			std::optional<float> course_measured;
+			std::optional<float> course_magnetic;
+			std::optional<float> speed_km;
+			std::optional<char> mode;
+			void dump() {
+				if (speed_km) {
+					printf("speed_km = %f\n", *speed_km);
+				} else {
+					printf("no speed_km\n");
+				}
+			}
+			void clear() {
+				*this = Vtg();
+			}
+			bool valid() {
+				return (bool)speed_km;
+			}
+		} vtg;
 	};
 
 	Mutex_val<Data> data;
@@ -104,10 +131,8 @@ public:
 		ESP_ERROR_CHECK(uart_param_config(uart_num, &uart_config));
 		ESP_ERROR_CHECK(uart_set_pin(uart_num, -1, pins::GPS_TX, -1, -1));
 
-		const int uart_buffer_size = (1024 * 3);
-
-		ESP_ERROR_CHECK(uart_driver_install(uart_num, uart_buffer_size, 0, 10, &uart_queue, 0));
-		Task::start("gps", 2048);
+		ESP_ERROR_CHECK(uart_driver_install(uart_num, 1024, 0, 10, &uart_queue, 0));
+		Task::start("gps", 1024*4);
 	}
 
 	void task() override {
@@ -122,6 +147,9 @@ public:
 				if (parse_buffer.match("GPGGA")) {
 					parse_buffer.reset();
 					parse_gga();
+				} else if (parse_buffer.match("GPVTG")) {
+					parse_buffer.reset();
+					parse_vtg();
 				} else {
 //					parse_buffer.write(0);
 //					printf("got %s\n", parse_buffer.buf);
@@ -135,17 +163,39 @@ public:
 	void parse_gga() {
 		auto _data = data.get();
 		auto &out = _data->gga;
-		out.time = parse_time();
-		out.lat = parse_lat();
-		out.lon = parse_lon();
-		out.quality = parse_dec<uint8_t>();
-		out.num_sats = parse_dec<uint8_t>();
-		out.hdop = parse_float();
-		out.alt = parse_float_units();
-		out.undulation = parse_float_units();
-		out.age = parse_dec<uint8_t>();
-		out.stn_ID = parse_dec<uint16_t>();
-		parse_csum();
+		try {
+			out.time = parse_time();
+			out.lat = parse_lat();
+			out.lon = parse_lon();
+			out.quality = parse_dec<uint8_t>();
+			out.num_sats = parse_dec<uint8_t>();
+			out.hdop = parse_float();
+			out.alt = parse_float_units('M');
+			out.undulation = parse_float_units('M');
+			out.age = parse_dec<uint8_t>();
+			out.stn_ID = parse_dec<uint16_t>();
+			parse_csum();
+		} catch(...) {
+			out.clear();
+			throw;
+		}
+	}
+
+	void parse_vtg() {
+		auto _data = data.get();
+		auto &out = _data->vtg;
+		try {
+			out.course_measured = parse_float_units('T');
+			out.course_magnetic = parse_float_units('M');
+			parse_float_units('N'); // speed_knots
+			out.speed_km = parse_float_units('K');
+			out.mode = parse_char();
+			parse_csum();
+		} catch(...) {
+			out.clear();
+			throw;
+		}
+//		out.dump();
 	}
 
 	uint32_t digit(uint8_t ch) {
@@ -189,6 +239,8 @@ public:
 				}
 			}
 			parse_buffer.reset();
+		} else {
+			while (!sep(ch())) {}
 		}
 		return f;
 	}
@@ -208,6 +260,8 @@ public:
 				}
 			}
 			parse_buffer.reset();
+		} else {
+			while (!sep(ch())) {}
 		}
 		return f;
 	}
@@ -241,17 +295,38 @@ public:
 		return out;
 	}
 
-	std::optional<float> parse_float_units() {
+	std::optional<std::pair<float, char>> parse_float_units() {
+		std::optional<std::pair<float, char>> out;
 		auto f = parse_float();
 		read_segment_into_parse_buffer();
 		if (f && parse_buffer.end_pos > 0) {
-			if (parse_buffer.buf[0] != 'M') {
-				throw std::runtime_error("unsupported unit (foot)");
-			}
-		} else {
-			f = {};
+			out = {*f, parse_buffer.buf[0]};
 		}
-		return f;
+		parse_buffer.reset();
+		return out;
+	}
+
+	std::optional<float> parse_float_units(char expect) {
+		std::optional<float> out;
+		auto fu = parse_float_units();
+		if (fu) {
+			if (fu->second == expect) {
+				out = fu->first;
+			} else {
+				ESP_LOGW(TAG, "unexpected unit: %c; expected %c", fu->second, expect);
+			}
+		}
+		return out;
+	}
+
+	std::optional<char> parse_char() {
+		std::optional<char> out;
+		auto c = ch();
+		if (!sep(c)) {
+			out = c;
+			while(!sep(ch())) {}
+		}
+		return out;
 	}
 
 	void read_segment_into_parse_buffer() {
@@ -270,3 +345,16 @@ public:
 };
 
 extern GPS gps;
+
+
+
+/*
+$GPGLL,,,,,235448.00,V,N*46
+$GPRMC,235449.00,V,,,,,,,280323,,,N*78
+$GPVTG,,,,,,,,,N*30
+$GPGGA,235449.00,,,,,0,00,99.99,,,,,,*6B
+$GPGSA,A,1,,,,,,,,,,,,,99.99,99.99,99.99*30
+$GPGSV,3,1,11,03,37,146,20,04,81,091,,06,39,267,,07,24,206,*72
+$GPGSV,3,2,11,09,61,264,,11,25,315,21,16,24,107,,20,02,315,*75
+$GPGSV,3,3,11,26,29,066,,29,06,011,,31,11,046,*4B
+*/

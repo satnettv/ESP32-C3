@@ -123,6 +123,11 @@ public:
 		write(*((uint32_t*)&data), 4, chk);
 	}
 
+	void write_tag(uint8_t num, uint8_t(&data)[4], chkcalc &chk) {
+		write(num, 1, chk);
+		write_arr(data, 4, chk);
+	}
+
 
 	class Server_com {
 		friend Protocol;
