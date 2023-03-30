@@ -16,6 +16,7 @@ public:
 	}
 
 	ssize_t write(segment seg) {
+//		seg.dump_hex();
 		return write(seg.data, seg.size);
 	}
 

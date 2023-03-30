@@ -28,7 +28,7 @@ class CommTask: public Task {
 					if (++i == 0xFC) {
 						i = 1;
 					}
-					Timeout t(pdMS_TO_TICKS(15000));
+					Timeout t(pdMS_TO_TICKS(1000 * 60 * 5));
 
 					proto.begin_package(i);
 					write_gps_packet();
@@ -85,8 +85,8 @@ class CommTask: public Task {
 		}
 		auto t = rp->com_header2();
 		timeval tv = {
-			.tv_sec = t / 1000,
-			.tv_usec = (suseconds_t)(t % 1000) * 1000,
+			.tv_sec = t,
+			.tv_usec = 0
 		};
 		sntp_sync_time(&tv);
 		ESP_LOGI(TAG, "ok; server time is %lu", t);
@@ -96,21 +96,22 @@ class CommTask: public Task {
 		auto d = gps.data.get();
 //		d->gga.dump();
 		if (d->gga.valid()) {
-			auto calc = proto.begin_packet(5 * 2, proto.DATA);
+			auto calc = proto.begin_packet(proto.DATA);
 			proto.write_tag(3, *d->gga.lat, calc);
 			proto.write_tag(4, *d->gga.lon, calc);
-			proto.end_packet(calc);
-
 			if (d->vtg.valid()) {
 				uint8_t data[4];
 				data[3] = *d->vtg.speed_km / 1.852;
+//				printf("sk = %02x ", data[3]);
 				data[2] = *d->gga.num_sats << 4;
+//				printf("ns = %02x ", data[2]);
 				data[1] = *d->gga.alt / 10;
+//				printf("alt = %02x ", data[1]);
 				data[0] = *d->vtg.course_measured / 2;
-				auto calc = proto.begin_packet(5, proto.DATA);
+//				printf("c = %02x\n", data[0]);
 				proto.write_tag(5, data, calc);
-				proto.end_packet(calc);
 			}
+			proto.end_packet(calc);
 		}
 	}
 public:

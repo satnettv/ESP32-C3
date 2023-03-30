@@ -20,6 +20,17 @@ protected:
 		}
 	};
 
+	class packet_buider {
+		friend Protocol;
+		chkcalc csum;
+		size_t len_pos;
+	public:
+		packet_buider(size_t len_pos): len_pos(len_pos) {}
+		void feed(uint8_t val) {
+			csum.feed(val);
+		}
+	};
+
 public:
 	enum Packet_type: uint8_t {
 		DATA = 1,
@@ -37,13 +48,13 @@ public:
 			num >>= 8;
 		}
 	}
-	template <class T> void write(T num, size_t size, chkcalc &chk) {
+	template <class T, class Chk> void write(T num, size_t size, Chk &chk) {
 		while(size--) {
 			chk.feed(buf[pos++] = num & 0xFF);
 			num >>= 8;
 		}
 	}
-	void write_arr(const uint8_t *data, size_t size, chkcalc &chk) {
+	template <class Chk> void write_arr(const uint8_t *data, size_t size, Chk &chk) {
 		for (size_t i = 0; i < size; ++i) {
 			chk.feed(buf[pos++] = data[i]);
 		}
@@ -99,12 +110,28 @@ public:
 		buf[pos++] = 0x5D;
 	}
 
-	chkcalc begin_packet(uint16_t length, Packet_type type) {
-		chkcalc chk;
+	packet_buider begin_packet(Packet_type type) {
 		buf[pos++] = type;
+		packet_buider pkt(pos);
+		pos += 2;
+		write<uint32_t>(time(0), 4, pkt.csum);
+		return pkt;
+	}
+
+	chkcalc begin_packet(Packet_type type, uint16_t length) {
+		buf[pos++] = type;
+		chkcalc chk;
 		write<uint16_t>(length, 2);
-		write<uint32_t>(time(0) * 1000, 4, chk);
+		write<uint32_t>(time(0), 4, chk);
 		return chk;
+	}
+
+	void end_packet(packet_buider &chk) {
+		auto pos_tmp = pos;
+		pos = chk.len_pos;
+		write<uint16_t>(pos_tmp - pos - 6, 2);
+		pos = pos_tmp;
+		buf[pos++] = chk.csum.get();
 	}
 
 	void end_packet(chkcalc &chk) {
@@ -112,18 +139,17 @@ public:
 	}
 
 	void text_packet(const char *text) {
-		auto len = strlen(text);
-		auto chk = begin_packet(len, TEXT);
-		write_arr((const uint8_t*)text, len, chk);
+		auto chk = begin_packet(TEXT);
+		write_arr((const uint8_t*)text, strlen(text), chk);
 		end_packet(chk);
 	}
 
-	void write_tag(uint8_t num, float data, chkcalc &chk) {
+	void write_tag(uint8_t num, float data, packet_buider &chk) {
 		write(num, 1, chk);
 		write(*((uint32_t*)&data), 4, chk);
 	}
 
-	void write_tag(uint8_t num, uint8_t(&data)[4], chkcalc &chk) {
+	void write_tag(uint8_t num, uint8_t(&data)[4], packet_buider &chk) {
 		write(num, 1, chk);
 		write_arr(data, 4, chk);
 	}
@@ -165,7 +191,8 @@ public:
 			if (parcel_number != 0 || data.size != 4) {
 				throw std::runtime_error("unexpected response to header2");
 			}
-			return read<uint32_t>(data);
+			auto t = read<uint32_t>(data);
+			return t;
 		}
 	};
 	friend Server_com;
