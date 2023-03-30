@@ -4,6 +4,12 @@
 
 namespace server {
 
+template<typename T>
+concept Chkcalc = requires(T a)
+{
+    { a.feed((uint8_t)0) };
+};
+
 class Protocol {
 protected:
 	uint8_t buf[255 + 6]; //max server response
@@ -43,24 +49,28 @@ public:
 	};
 
 	template <class T> void write(T num, size_t size) {
+		assert(pos + size <= sizeof(buf));
 		while(size--) {
 			buf[pos++] = num & 0xFF;
 			num >>= 8;
 		}
 	}
-	template <class T, class Chk> void write(T num, size_t size, Chk &chk) {
+	template <class T, Chkcalc C> void write(T num, size_t size, C &chk) {
+		assert(pos + size <= sizeof(buf));
 		while(size--) {
 			chk.feed(buf[pos++] = num & 0xFF);
 			num >>= 8;
 		}
 	}
-	template <class Chk> void write_arr(const uint8_t *data, size_t size, Chk &chk) {
+	template <Chkcalc C> void write_arr(const uint8_t *data, size_t size, C &chk) {
+		assert(pos + size <= sizeof(buf));
 		for (size_t i = 0; i < size; ++i) {
 			chk.feed(buf[pos++] = data[i]);
 		}
 	}
 
 	void write_arr(const uint8_t *data, size_t size) {
+		assert(pos + size <= sizeof(buf));
 		for (size_t i = 0; i < size; ++i) {
 			buf[pos++] = data[i];
 		}
@@ -144,16 +154,11 @@ public:
 		end_packet(chk);
 	}
 
-	void write_tag(uint8_t num, float data, packet_buider &chk) {
+	template <class T, Chkcalc C> requires requires(T t) { requires sizeof(t) == 4; }
+	void write_tag(uint8_t num, const T &data, C &chk) {
 		write(num, 1, chk);
-		write(*((uint32_t*)&data), 4, chk);
+		write(*((const uint32_t*)&data), 4, chk);
 	}
-
-	void write_tag(uint8_t num, uint8_t(&data)[4], packet_buider &chk) {
-		write(num, 1, chk);
-		write_arr(data, 4, chk);
-	}
-
 
 	class Server_com {
 		friend Protocol;

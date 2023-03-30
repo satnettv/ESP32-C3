@@ -114,7 +114,7 @@ namespace {
 	        return 1;
 	    }
 	    uint16_t pin = expander_write_args.pin->ival[0];
-    	if (pin < 0 || pin > 9) {
+    	if (pin > 9) {
     		ESP_LOGE("main", "gpio num is out of range");
     		return 1;
     	}
