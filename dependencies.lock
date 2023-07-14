@@ -15,7 +15,7 @@ dependencies:
     component_hash: null
     source:
       type: idf
-    version: 5.0.1
+    version: 5.1.0
   igrr/libnmea:
     component_hash: 25ea527f892761c4311831ecadfa0cb1a3a323501c43b4a8263639beec01ae57
     source:

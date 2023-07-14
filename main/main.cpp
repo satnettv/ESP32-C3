@@ -8,8 +8,6 @@
 #include "led.hpp"
 #include "gsm_modem.hpp"
 #include "i2c.hpp"
-#include "i2c_expander.hpp"
-#include "mpu9250.hpp"
 #include "argtable3/argtable3.h"
 #include "console.hpp"
 #include "fs.hpp"
@@ -18,15 +16,16 @@
 #include "mqtt.hpp"
 #include "bluetooth.hpp"
 #include "adc.hpp"
+#include "QMA6100P.hpp"
 #include "server/task.hpp"
+#include <cmath>
 
 
 GPS gps;
 led_strip_handle_t led_strip;
 Gsm_modem modem;
 I2C i2c;
-I2C_expander ex;
-MPU9250 mpu;
+PCA9557 expander;
 FS fs;
 Webserver ws;
 CAN can;
@@ -34,11 +33,13 @@ MQTT mq;
 BT bt;
 ADC adc;
 server::CommTask server_task;
+QMA6100p accel;
 
 extern "C"
 void app_main() {
 	setenv("TZ", "UTC-3", 1);
 	tzset();
+	esp_log_level_set("server:task", ESP_LOG_WARN);
 
     esp_err_t err = nvs_flash_init();
     if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -46,30 +47,53 @@ void app_main() {
         err = nvs_flash_init();
     }
     ESP_ERROR_CHECK(err);
-
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
     i2c.setup();
-//    ex.reset();
+//    i2c.scan();
+    accel.setup();
+//    expander.send_full_config();
+//	expander.read_full();
+//	printf("www %d %d %d %d\n", expander.regs[0], expander.regs[1], expander.regs[2], expander.regs[3]);
+
     initialise_wifi();
 //    bt.setup();
 //	fs.setup();
 	gps.setup();
-	configure_led();
-//	modem.setup();
+//	gps.power_on();
+//	configure_led();
+	modem.setup();
+// 	modem.print_details();
 //	mpu.setup();
 //	ws.setup();
-//	can.setup();
+	can.setup();
 //	mq.setup();
 //	adc.setup();
 	server_task.start("server_task", 1024*10);
 
-	modem.print_details();
-	ESP_LOGI("main", "expander serial number is %04lX", ex.read_uid());
-
 	init_console();
+//	while(true) {
+//		try {
+//			auto fifo = accel.read_fifo();
+//			for (auto &e: fifo) {
+//				printf("%0.4f %0.4f %0.4f %0.4f\n", e.x, e.y, e.z, sqrt(pow(e.x, 2) + pow(e.y, 2) + pow(e.z, 2)));
+//			}
+//		} catch(const std::exception &e) {
+//			ESP_LOGE("main", "exception %s", e.what());
+//		}
+//		vTaskDelay(1);
+//	}
 
+//	while(true) {
+//		modem.print_details();
+//		vTaskDelay(1000);
+//	}
+
+//	while(true) {
+//		can.send();
+//		can.handle_alerts(50);
+//	}
 }
 
 /*

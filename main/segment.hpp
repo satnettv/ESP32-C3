@@ -1,5 +1,8 @@
 #pragma once
 #include <cstdint>
+#include <cstring>
+#include <string>
+#include <algorithm>
 
 struct segment {
     uint8_t *data = 0;

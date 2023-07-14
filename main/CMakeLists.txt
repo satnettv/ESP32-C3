@@ -2,7 +2,7 @@
 # for more information about component CMakeLists.txt files.
 
 idf_component_register(
-    SRCS main.cpp wifi.cpp bluetooth.cpp     # list the source files of this component
+    SRCS main.cpp wifi.cpp bluetooth.cpp i2c.cpp    # list the source files of this component
     INCLUDE_DIRS        # optional, add here public include directories
     PRIV_INCLUDE_DIRS   # optional, add here private include directories
     REQUIRES            # optional, list the public requirements (component names)

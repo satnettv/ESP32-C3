@@ -25,19 +25,19 @@ public:
 	}
 
 	void setup() {
-		gpio_config_t g_cfg = {};
-		g_cfg.mode = GPIO_MODE_OUTPUT_OD;
-		g_cfg.pull_up_en = GPIO_PULLUP_ENABLE;
-		g_cfg.pin_bit_mask = (uint32_t)1 << pins::GSM_RST;
-		ESP_ERROR_CHECK(gpio_config(&g_cfg));
-		gpio_set_level((gpio_num_t)pins::GSM_RST, 0);
-		vTaskDelay(pdMS_TO_TICKS(200));
-		gpio_set_level((gpio_num_t)pins::GSM_RST, 1);
+//		gpio_config_t g_cfg = {};
+//		g_cfg.mode = GPIO_MODE_OUTPUT_OD;
+//		g_cfg.pull_up_en = GPIO_PULLUP_ENABLE;
+////		g_cfg.pin_bit_mask = (uint32_t)1 << pins::GSM_RST;
+//		ESP_ERROR_CHECK(gpio_config(&g_cfg));
+//		gpio_set_level((gpio_num_t)pins::GSM_RST, 0);
+//		vTaskDelay(pdMS_TO_TICKS(200));
+//		gpio_set_level((gpio_num_t)pins::GSM_RST, 1);
 
 		vTaskDelay(pdMS_TO_TICKS(5000));
 
 		using namespace esp_modem;
-//		esp_log_level_set("command_lib", ESP_LOG_VERBOSE);
+		esp_log_level_set("command_lib", ESP_LOG_VERBOSE);
 
 	    esp_modem_dce_config_t dce_config = ESP_MODEM_DCE_DEFAULT_CONFIG("default_apn");
 	    esp_netif_config_t ppp_netif_config = ESP_NETIF_DEFAULT_PPP();
@@ -57,17 +57,17 @@ public:
 
 	    _dce = create_SIM800_dce(&dce_config, _dte, esp_netif);
 	    assert(_dce != nullptr);
-	    data_mode();
+//	    data_mode();
 	}
 	void print_details() {
-//		using namespace esp_modem;
-//	    std::string string;
-//	    auto res = _dce->get_imsi(string);
-//	    if (res == command_result::OK) {
-//	    	ESP_LOGI(TAG, "imsi is %.*s", string.size(), string.data());
-//	    } else {
-//	    	ESP_LOGW(TAG, "get_imsi: %s", res == command_result::FAIL ? "FAIL" : "TIMEOUT");
-//	    }
+		using namespace esp_modem;
+	    std::string string;
+	    auto res = _dce->get_imsi(string);
+	    if (res == command_result::OK) {
+	    	ESP_LOGI(TAG, "imsi is %.*s", string.size(), string.data());
+	    } else {
+	    	ESP_LOGW(TAG, "get_imsi: %s", res == command_result::FAIL ? "FAIL" : "TIMEOUT");
+	    }
 //	    res = _dce->get_imei(string);
 //	    if (res == command_result::OK) {
 //	    	ESP_LOGI(TAG, "imei is %.*s", string.size(), string.data());
@@ -105,7 +105,7 @@ public:
 //		} else {
 //			ESP_LOGW(TAG, "get_network_attachment_state: %s", res == command_result::FAIL ? "FAIL" : "TIMEOUT");
 //		}
-//
+////
 //	    bool pin_ok;
 //	    res = _dce->read_pin(pin_ok);
 //	    if (res == command_result::OK) {

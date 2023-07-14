@@ -8,6 +8,7 @@
 #include "freertospp/Task.hpp"
 #include "fs.hpp"
 #include <optional>
+#include "PCA9557.hpp"
 
 class GPS: public Task {
 protected:
@@ -49,9 +50,9 @@ protected:
 				buffer.end_pos = 0;
 			}
 		}
-//		if (buffer.buf[buffer.parse_pos] != '\r') {
+		if (buffer.buf[buffer.parse_pos] != '\r') {
 //			printf("%c", buffer.buf[buffer.parse_pos]);
-//		}
+		}
 		return buffer.buf[buffer.parse_pos++];
 	}
 
@@ -118,9 +119,15 @@ public:
 
 	Mutex_val<Data> data;
 
+	void dump() {
+		auto r = data.get();
+		r->gga.dump();
+		r->vtg.dump();
+	}
+
 	void setup() {
 		uart_config_t uart_config = {
-		    .baud_rate = 9600,
+		    .baud_rate = 115200,
 		    .data_bits = UART_DATA_8_BITS,
 		    .parity = UART_PARITY_DISABLE,
 		    .stop_bits = UART_STOP_BITS_1,
@@ -132,6 +139,9 @@ public:
 		ESP_ERROR_CHECK(uart_set_pin(uart_num, -1, pins::GPS_TX, -1, -1));
 
 		ESP_ERROR_CHECK(uart_driver_install(uart_num, 1024, 0, 10, &uart_queue, 0));
+
+		expander.set_output(pins::EX_GNSS_EN, 0);
+		expander.send_output();
 		Task::start("gps", 1024*4);
 	}
 
@@ -216,6 +226,7 @@ public:
 				throw std::runtime_error("expected .");
 			}
 			uint8_t s_dec = digit(ch()) * 10 + digit(ch());
+			(void)s_dec;
 			if (!sep(ch())) {
 				throw std::runtime_error("expected separator");
 			}
@@ -270,7 +281,7 @@ public:
 		return c == '\r' || c == ',' || c == '*';
 	}
 
-	template <class T> std::optional<T>parse_dec() {
+	template <class T> std::optional<T> parse_dec() {
 		std::optional<T> out;
 		char c = ch();
 		if (!sep(c)) {
@@ -341,6 +352,19 @@ public:
 
 		}
 		return 0;
+	}
+
+	void power_on() {
+		expander.set_output(pins::EX_GNSS_EN, 1);
+		expander.send_output();
+		printf("www %d %d %d %d\n", expander.read_pins(), expander.regs[1], expander.regs[2], expander.regs[3]);
+		expander.read_full();
+		printf("www %d %d %d %d\n", expander.regs[0], expander.regs[1], expander.regs[2], expander.regs[3]);
+	}
+
+	void power_off() {
+		expander.set_output(pins::EX_GNSS_EN, 0);
+		expander.send_output();
 	}
 };
 

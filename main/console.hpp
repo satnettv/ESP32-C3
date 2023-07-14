@@ -3,11 +3,12 @@
 #include "freq_meter.hpp"
 #include "fs.hpp"
 #include "gsm_modem.hpp"
+#include "PCA9557.hpp"
 
 extern FS fs;
 extern Gsm_modem modem;
 extern esp_netif_t *sta_netif;
-extern I2C_expander ex;
+extern PCA9557 expander;
 
 namespace {
 	struct {
@@ -96,9 +97,9 @@ namespace {
     		ESP_LOGE("main", "gpio num is out of range");
     		return 1;
     	}
-	    ex.port_mode_input(1 << pin);
-	    auto res = ex.digital_read();
-	    ESP_LOGI("main", "expander pin %d value is %s", pin, ((1 << pin) & res) ? "high" : "low");
+	    expander.set_port_mode(pin, PCA9557::input);
+//	    auto res = ex.digital_read();
+//	    ESP_LOGI("main", "expander pin %d value is %s", pin, ((1 << pin) & res) ? "high" : "low");
 		return 0;
 	}
 
@@ -108,28 +109,28 @@ namespace {
 		struct arg_end *end = arg_end(1);
 	} expander_write_args;
 	int expander_write(int argc, char **argv) {
-	    int nerrors = arg_parse(argc, argv, (void **)&expander_write_args);
-	    if (nerrors != 0) {
-	        arg_print_errors(stderr, expander_write_args.end, argv[0]);
-	        return 1;
-	    }
-	    uint16_t pin = expander_write_args.pin->ival[0];
-    	if (pin > 9) {
-    		ESP_LOGE("main", "gpio num is out of range");
-    		return 1;
-    	}
-    	auto &value = expander_write_args.value->ival[0];
-    	if (value < 0 || value > 1) {
-    		ESP_LOGE("main", "write value is out of range");
-    		return 1;
-    	}
-	    ex.port_mode_output(1u << pin);
-	    if (value) {
-	    	ex.digital_write_high(1u << pin);
-	    } else {
-	    	ex.digital_write_low(1u << pin);
-	    }
-	    ESP_LOGI("main", "expander pin %d value is %s", pin, value ? "high" : "low");
+//	    int nerrors = arg_parse(argc, argv, (void **)&expander_write_args);
+//	    if (nerrors != 0) {
+//	        arg_print_errors(stderr, expander_write_args.end, argv[0]);
+//	        return 1;
+//	    }
+//	    uint16_t pin = expander_write_args.pin->ival[0];
+//    	if (pin > 9) {
+//    		ESP_LOGE("main", "gpio num is out of range");
+//    		return 1;
+//    	}
+//    	auto &value = expander_write_args.value->ival[0];
+//    	if (value < 0 || value > 1) {
+//    		ESP_LOGE("main", "write value is out of range");
+//    		return 1;
+//    	}
+//	    ex.port_mode_output(1u << pin);
+//	    if (value) {
+//	    	ex.digital_write_high(1u << pin);
+//	    } else {
+//	    	ex.digital_write_low(1u << pin);
+//	    }
+//	    ESP_LOGI("main", "expander pin %d value is %s", pin, value ? "high" : "low");
 		return 0;
 	}
 }

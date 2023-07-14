@@ -45,6 +45,21 @@ public:
 		return messages;
 	}
 
+	void send() {
+		twai_message_t message;
+		message.identifier = 0xAAAA;
+		message.extd = 1;
+		message.data_length_code = 4;
+		for (int i = 0; i < 4; i++) {
+		    message.data[i] = 0;
+		}
 
+		//Queue message for transmission
+		if (twai_transmit(&message, pdMS_TO_TICKS(1000)) == ESP_OK) {
+		    printf("Message queued for transmission\n");
+		} else {
+		    printf("Failed to queue message for transmission\n");
+		}
+	}
 };
 
